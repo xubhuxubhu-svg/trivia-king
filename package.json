@@ -1,0 +1,16 @@
+{
+  "name": "trivia-king",
+  "version": "1.0.0",
+  "description": "叫我全能智慧王：全類別益智問答遊戲（連線版）",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "compression": "^1.7.5",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "ws": "^8.18.0"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
