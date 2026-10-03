@@ -141,7 +141,28 @@ const Music = {
     ['la', 'Do', 'Re', 'Mi', 'Re', 'Do', 'la', '-', 'so', 'la', 'Do', 'la', 'so', '-', '-', '-']
   ],
   B: ['do', 'la', 'mi', 'so'],
-  toggle(on) { if (on && !this.timer) { this.timer = setInterval(() => this.note(), 300); } else if (!on && this.timer) { clearInterval(this.timer); this.timer = null; } },
+  /* 如果遊戲資料夾裡有 music.mp3，就改播放這首歌；沒有的話用程式合成的五聲音階小曲 */
+  file: null, fileOk: null,
+  probe() {
+    if (this.fileOk !== null || location.protocol === 'file:') { if (this.fileOk === null) this.fileOk = false; return; }
+    this.fileOk = false;
+    try {
+      const a = new Audio(); a.loop = true; a.preload = 'auto';
+      a.oncanplay = () => { if (!this.file) { this.file = a; this.fileOk = true; this.toggle(S.music); } };
+      a.onerror = () => { this.fileOk = false; };
+      a.src = 'music.mp3';
+    } catch (e) { }
+  },
+  toggle(on) {
+    this.probe();
+    if (this.file) {
+      if (this.timer) { clearInterval(this.timer); this.timer = null; }
+      this.file.volume = Math.min(1, .35 * S.vol);
+      if (on) { const p = this.file.play(); if (p && p.catch) p.catch(() => { }); } else this.file.pause();
+      return;
+    }
+    if (on && !this.timer) { this.timer = setInterval(() => this.note(), 300); } else if (!on && this.timer) { clearInterval(this.timer); this.timer = null; }
+  },
   pluck(f, t, v, dur) {
     const c = SFX.ctx; const o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
     o.type = 'triangle'; o.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 2;
@@ -150,7 +171,7 @@ const Music = {
     o.connect(g).connect(c.destination); o.start(t); o2.start(t); o.stop(t + dur + .05); o2.stop(t + dur + .05);
   },
   note() {
-    if (!SFX.ctx || !S.music || document.hidden || SFX.ctx.state !== 'running') return;
+    if (this.file || !SFX.ctx || !S.music || document.hidden || SFX.ctx.state !== 'running') return;
     const ph = this.P[this.phrase], i = this.step % 16, t = SFX.ctx.currentTime + .02;
     const n = this.N[ph[i]]; if (n) this.pluck(n, t, .045, .9);
     if (i % 8 === 0) this.pluck(this.N[this.B[this.phrase]] / 2, t, .05, 1.6);
@@ -160,14 +181,22 @@ const Music = {
 
 /* ---------- 語音 ---------- */
 const Voice = {
-  v: null, ok: 'speechSynthesis' in window,
+  v: null, ok: 'speechSynthesis' in window, unlocked: false, pending: null,
   init() {
     if (!this.ok) return;
     const pick = () => { const vs = speechSynthesis.getVoices(); this.v = vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /zh[-_](HK|Hant)/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null; };
     pick(); speechSynthesis.onvoiceschanged = pick;
   },
+  /* 手機瀏覽器要等使用者第一次點畫面後才准發出語音：先記下來，第一次點擊時補講 */
+  unlock() {
+    if (!this.ok || this.unlocked) return; this.unlocked = true;
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.lang = 'zh-TW'; speechSynthesis.speak(u); } catch (e) { }
+    if (!this.v) try { const vs = speechSynthesis.getVoices(); this.v = vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null; } catch (e) { }
+    if (this.pending) { const [t, o] = this.pending; this.pending = null; setTimeout(() => this.say(t, o), 150); }
+  },
   say(t, opt = {}) {
     if (!this.ok || !S.voice || !t) return;
+    if (!this.unlocked) { this.pending = [t, opt]; return; }
     try {
       if (!opt.queue) speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(String(t).replace(/[_＿]{2,}/g, '空格').replace(/[「」『』]/g, ''));
@@ -253,5 +282,5 @@ function graduation(i) {
 /* 閒置打瞌睡 */
 let idleT = 0;
 function poke() { idleT = Date.now(); $$('.owl[data-s=sleep]').forEach(o => o.dataset.s = 'idle'); }
-['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { poke(); SFX.init(); }, true));
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, () => { poke(); SFX.init(); Voice.unlock(); if (Music.file && S.music && Music.file.paused) Music.toggle(true); }, true));
 setInterval(() => { if (Date.now() - idleT > 30000) $$('.owl[data-s=idle]').forEach(o => o.dataset.s = 'sleep'); }, 5000);

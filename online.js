@@ -83,7 +83,7 @@ const NET = {
 
 /* ===== 真人連線對戰 ===== */
 const OL = {
-  ws: null, me: null, room: null, q: null, qv: null, tm: null, inGame: false, myPick: null, answered: false, out: new Set(), answerer: null, opt: { mode: 'sync', cat: 'mix', diff: 0, count: 10 },
+  ws: null, me: null, room: null, q: null, qv: null, tm: null, inGame: false, myPick: null, answered: false, out: new Set(), answerer: null, opt: Object.assign({ mode: 'sync', cat: 'mix', diff: 0, count: 10 }, LS.get('tk_ol_opt', {})),
   connect() {
     return new Promise((res, rej) => {
       if (this.ws && this.ws.readyState === 1) return res();
@@ -96,7 +96,7 @@ const OL = {
     });
   },
   send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); },
-  reset() { this.stopT(); this.room = null; this.inGame = false; this.q = null; },
+  reset() { this.stopT(); this.room = null; this.inGame = false; this.q = null; this.showingEnd = false; this.answerer = null; this.out = new Set(); },
   close() { this.reset(); if (this.ws) { const w = this.ws; this.ws = null; try { w.send(JSON.stringify({ t: 'leave' })); } catch (e) { } try { w.close(); } catch (e) { } } },
   stopT() { if (this.tm) this.tm.stop(); this.tm = null; },
   isHost() { return this.room && this.room.host === this.me; },
@@ -109,7 +109,9 @@ const OL = {
     setTop('🌐 真人連線對戰', Home, () => showHowto('online'));
     const o = this.opt;
     const draw = () => {
+      const last = LS.get('tk_ol_last', null); const back = last && Date.now() - last.t < 30 * 60 * 1000 ? last : null;
       view(`<div class="hostrow"><div class="owl" data-s="cool"></div><div class="bubble">開一個房間，把房號告訴朋友，就能一起比賽！手機、電腦都可以加入。</div></div>
+      ${back ? `<button class="btn gold block" id="rejoin">📂 回到剛剛的比賽（房號 ${back.code}）</button>` : ''}
       <div class="card"><div class="h2">🔑 加入朋友的房間</div>
         <input class="field" id="code" inputmode="numeric" maxlength="4" placeholder="輸入四位數房號" style="text-align:center;font-size:1.4em;letter-spacing:.3em">
         <button class="btn primary block" id="join">加入房間</button></div>
@@ -117,14 +119,15 @@ const OL = {
         <div class="h3">玩法</div><div class="row" id="msel">${Object.entries(BMODES).map(([k, m]) => `<button class="btn ${k === o.mode ? 'primary' : ''}" data-m="${k}" style="padding:8px 4px;font-size:.9em">${m.icon}<br>${m.name}</button>`).join('')}</div>
         <p class="muted">${BMODES[o.mode].desc}${o.mode === 'duel' ? '（限兩人）' : '（二到五人）'}</p>
         <div class="h3">難度</div><div class="row" id="dsel">${[0, 1, 2, 3].map(d => `<button class="btn ${d === o.diff ? 'primary' : ''}" data-d="${d}">${DIFF[d]}</button>`).join('')}</div>
-        <div class="h3">題數</div><div class="row" id="csel">${[10, 15, 20].map(k => `<button class="btn ${k === o.count ? 'primary' : ''}" data-c="${k}">${k} 題</button>`).join('')}</div>
+        <div class="h3">題數</div><div class="row" id="csel">${[10, 20, 30, 50].map(k => `<button class="btn ${k === o.count ? 'primary' : ''}" data-c="${k}">${k} 題</button>`).join('')}</div>
         <div class="h3">類別</div><select class="field" id="catSel"><option value="mix">🌈 綜合（所有類別）</option>${CATS.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}</select>
         <button class="btn gold block" id="create">建立房間</button></div>`);
       $$('#msel .btn').forEach(b => b.onclick = () => { o.mode = b.dataset.m; SFX.play('click'); draw(); });
       $$('#dsel .btn').forEach(b => b.onclick = () => { o.diff = +b.dataset.d; SFX.play('click'); draw(); });
       $$('#csel .btn').forEach(b => b.onclick = () => { o.count = +b.dataset.c; SFX.play('click'); draw(); });
       $('#catSel').value = o.cat; $('#catSel').onchange = e => o.cat = e.target.value;
-      $('#create').onclick = async () => { SFX.play('click'); try { await this.connect(); this.send({ t: 'create', name: PNAME, ...o }); } catch (e) { toast(e.message); } };
+      if ($('#rejoin')) $('#rejoin').onclick = async () => { SFX.play('click'); try { await this.connect(); this.send({ t: 'join', code: back.code, name: PNAME }); } catch (e) { toast(e.message); } };
+      $('#create').onclick = async () => { SFX.play('click'); LS.set('tk_ol_opt', o); try { await this.connect(); this.send({ t: 'create', name: PNAME, ...o }); } catch (e) { toast(e.message); } };
       $('#join').onclick = async () => {
         const c = $('#code').value.replace(/\D/g, ''); if (c.length !== 4) return toast('請輸入四位數房號');
         SFX.play('click'); try { await this.connect(); this.send({ t: 'join', code: c, name: PNAME }); } catch (e) { toast(e.message); }
@@ -146,7 +149,7 @@ const OL = {
       <div class="card"><div class="h3">⚙️ 比賽設定${host ? '' : '（由房主決定）'}</div>
       ${host ? `<div class="row" id="msel">${Object.entries(BMODES).map(([k, x]) => `<button class="btn ${k === r.mode ? 'primary' : ''}" data-m="${k}" style="padding:8px 4px;font-size:.9em">${x.icon}<br>${x.name}</button>`).join('')}</div>
         <div class="row" id="dsel" style="margin-top:6px">${[0, 1, 2, 3].map(d => `<button class="btn ${d === r.diff ? 'primary' : ''}" data-d="${d}">${DIFF[d]}</button>`).join('')}</div>
-        <div class="row" id="csel" style="margin-top:6px">${[10, 15, 20].map(k => `<button class="btn ${k === r.count ? 'primary' : ''}" data-c="${k}">${k} 題</button>`).join('')}</div>
+        <div class="row" id="csel" style="margin-top:6px">${[10, 20, 30, 50].map(k => `<button class="btn ${k === r.count ? 'primary' : ''}" data-c="${k}">${k} 題</button>`).join('')}</div>
         <select class="field" id="catSel"><option value="mix">🌈 綜合（所有類別）</option>${CATS.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}</select>`
         : `<p>${m.icon} ${m.name}・${DIFF[r.diff]}・${r.count} 題・${r.cat === 'mix' ? '🌈 綜合' : (CAT[r.cat] ? CAT[r.cat].icon + ' ' + CAT[r.cat].name : r.cat)}</p>`}</div>
       ${host ? `<button class="btn primary block" id="start" ${r.players.length < 2 ? 'disabled' : ''}>${r.players.length < 2 ? '等待朋友加入……' : '🔔 開始比賽！'}</button>` : `<p class="center muted">等待房主開始比賽……</p>`}
@@ -211,7 +214,11 @@ const OL = {
     if (!this.q) { $('#qarea').innerHTML = '<div class="card center">⚠️ 你的題庫版本和房主不同，這題無法顯示。請重新整理網頁更新遊戲。</div>'; if (r.mode !== 'buzz') this.send({ t: 'ans', ok: false, pk: null }); return; }
     const q = this.q;
     if (r.mode === 'buzz') {
-      this.qv = QView($('#qarea'), q, { onPick: (ok, pk) => { this.answered = true; this.myPick = pk; this.qv.markPick(pk); this.qv.lock(); this.stopT(); this.send({ t: 'ans', ok, pk }); this.record(ok); }, canPick: () => this.answerer === this.me && !this.answered });
+      const canBuzz = () => { const ph = $('#phase'); return ph && ph.textContent === '🔔 開放搶答' && !this.answerer && !this.out.has(this.me); };
+      this.qv = QView($('#qarea'), q, {
+        onPick: (ok, pk) => { const mine = this.answerer === this.me; this.answered = true; this.myPick = pk; this.qv.markPick(pk); this.qv.lock(); this.stopT(); this.send({ t: mine ? 'ans' : 'buzzans', ok, pk }); this.record(ok); $('#bubble').textContent = '已作答，等待結果……'; },
+        canPick: () => { if (this.answered) return false; if (this.answerer === this.me || canBuzz()) return true; toast(this.out.has(this.me) ? '你這題已經答錯了' : this.answerer ? '別人搶到了，等一下喔' : '題目讀完才能搶答'); return false; }
+      });
       $('#phase').textContent = '📖 聽題中';
       $('#buzzArea').innerHTML = `<button class="buzzer" id="buzzer" disabled>🔔 搶答！</button><div class="muted center">電腦可以按空白鍵搶答</div>`;
       $('#buzzer').onclick = () => this.buzz();
@@ -232,10 +239,11 @@ const OL = {
       case 'info': toast(m.msg); break;
       case 'left': this.room = null; break;
       case 'chat': { const p = this.pl(m.id); banner(`${p ? p.av : ''} ${m.n}：${m.msg}`); break; }
-      case 'start': this.inGame = true; this.showingEnd = false; this.gameView(); this.pls(); break;
+      case 'start': if (r) LS.set('tk_ol_last', { code: r.code, t: Date.now() }); this.inGame = true; this.showingEnd = false; this.gameView(); this.pls(); break;
       case 'q': if (r) this.onQ(m); break;
       case 'open': {
         if (!r || !$('#phase')) return; this.out = new Set(m.out); this.answerer = null;
+        if (!this.out.has(this.me)) { this.answered = false; $$('.opts', $('#qarea')).forEach(o => o.classList.remove('locked')); }
         $('#phase').textContent = '🔔 開放搶答'; SFX.play('pop'); Owl.set('idle');
         const b = $('#buzzer'); if (b) b.disabled = this.out.has(this.me);
         $('#bubble').textContent = this.out.has(this.me) ? '你這題已經答錯了，看看別人吧！' : '開放搶答！'; this.bar(m.sec); break;
@@ -253,6 +261,7 @@ const OL = {
         if (!r) return; r.players = m.players; this.out = new Set(m.out); this.answerer = null; this.stopT();
         const p = this.pl(m.id); SFX.play('wrong'); Owl.set('sad', 1200);
         if (m.id === this.me && !this.recorded) this.record(false);
+        if (m.id === this.me && m.pk != null) { const ob = $(`.opt[data-o="${m.pk}"]`); if (ob) ob.classList.add('wrong'); }
         if (m.id !== this.me && m.pk != null && this.qv) this.qv.markPick(m.pk);
         const marks = {}; this.out.forEach(k => marks[k] = '❌'); this.pls(marks);
         $('#bubble').textContent = `${m.id === this.me ? '你' : p.n} ${m.timeout ? '時間到' : '答錯了'}！扣 50 分，其他人可以再搶答！`; break;
@@ -281,14 +290,14 @@ const OL = {
       if (m.id === this.me) Voice.say(line('correct')); else Voice.say(p.n + '答對了！');
     } else {
       this.qv.reveal(this.myPick); SFX.play('gong');
-      $('#bubble').textContent = m.kind === 'none' ? '沒有人搶答……大家都在發呆嗎？' : '全部答錯！這題太難啦！'; Owl.set(m.kind === 'none' ? 'sleep' : 'sad', 1500);
+      $('#bubble').textContent = m.kind === 'none' ? '沒有人搶答……大家都在發呆嗎？' : '沒有人答對！這題太難啦！'; Owl.set(m.kind === 'none' ? 'sleep' : 'sad', 1500);
     }
     this.out.forEach(k => { if (!marks[k]) marks[k] = '❌'; });
     this.pls(marks);
     if (q.exp) $('#explain').innerHTML = `<div class="explain">💡 <b>答案：${esc(q.opts[0])}</b> ${esc(q.exp)}</div><p class="muted center">下一題馬上開始……</p>`;
   },
   onEnd(m) {
-    this.stopT(); this.inGame = false; this.showingEnd = true; document.onkeydown = null;
+    this.stopT(); this.inGame = false; this.showingEnd = true; document.onkeydown = null; LS.del('tk_ol_last');
     const win = m.rank[0] && m.rank[0].id === this.me; P.totals.games++;
     if (win) { P.best.battleWins++; addCoins(30); addXP(60); SFX.play('fanfare'); confetti(100); Voice.say('恭喜你獲得冠軍！'); }
     else { addCoins(8); SFX.play('lose'); Voice.say((m.rank[0] ? m.rank[0].n : '') + '獲得冠軍！下次再加油！'); }

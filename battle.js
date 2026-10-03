@@ -13,14 +13,15 @@ const BMODES = {
 function battleSetup(mode) {
   stopGame();
   const m = BMODES[mode];
-  let n = mode === 'duel' ? 1 : 2, lvls = [1, 1, 2], cat = 'mix', diff = 0, count = 10;
+  const mem = LS.get('tk_battle_opt', {});
+  let n = mode === 'duel' ? 1 : (mem.n || 2), lvls = mem.lvls || [1, 1, 2], cat = mem.cat || 'mix', diff = mem.diff || 0, count = mem.count || 10;
   setTop(m.icon + ' ' + m.name, Home, () => showHowto(mode));
   const draw = () => {
     view(`<div class="card"><div class="h2">${m.icon} ${m.name}</div><p class="muted">${m.desc}</p>
     ${mode !== 'duel' ? `<div class="h3">電腦玩家人數</div><div class="row" id="nsel">${[1, 2, 3].map(k => `<button class="btn ${k === n ? 'primary' : ''}" data-n="${k}">${k} 位</button>`).join('')}</div>` : ''}
     <div class="h3">電腦玩家程度</div>${Array.from({ length: n }, (_, i) => `<div class="row" style="margin:4px 0">${AIL.map((a, k) => `<button class="btn ${lvls[i] === k ? 'gold' : ''}" data-ai="${i}" data-k="${k}" style="padding:8px 4px;font-size:.85em">${a.av}<br>${a.n}</button>`).join('')}</div>`).join('')}
     <div class="h3">難度</div><div class="row" id="dsel">${[0, 1, 2, 3].map(d => `<button class="btn ${d === diff ? 'primary' : ''}" data-d="${d}">${DIFF[d]}</button>`).join('')}</div>
-    <div class="h3">題數</div><div class="row" id="csel2">${[10, 15, 20].map(k => `<button class="btn ${k === count ? 'primary' : ''}" data-c="${k}">${k} 題</button>`).join('')}</div>
+    <div class="h3">題數</div><div class="row" id="csel2">${[10, 20, 30, 50].map(k => `<button class="btn ${k === count ? 'primary' : ''}" data-c="${k}">${k} 題</button>`).join('')}</div>
     <div class="h3">類別</div><select class="field" id="catSel"><option value="mix">🌈 綜合（所有類別）</option>${CATS.map(c => `<option value="${c.id}" ${c.id === cat ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}</select>
     <button class="btn primary block" id="go">開戰！</button>
     <p class="muted center">${typeof NET !== 'undefined' && NET.on ? '想和真人朋友比賽？到首頁的「🌐 真人連線」開房間！' : '連線版可以和真人好友開房間對戰'}</p></div>`);
@@ -30,7 +31,7 @@ function battleSetup(mode) {
     $$('#csel2 .btn').forEach(b => b.onclick = () => { count = +b.dataset.c; draw(); });
     $('#catSel').value = cat; $('#catSel').onchange = e => cat = e.target.value;
     $('#go').onclick = () => {
-      SFX.play('gong');
+      SFX.play('gong'); LS.set('tk_battle_opt', { n: mode === 'duel' ? (mem.n || 2) : n, lvls, cat, diff, count });
       const players = [{ n: PNAME, av: '😎', me: true, sc: 0, buzz: 0, ok: 0, hp: 100 }].concat(Array.from({ length: n }, (_, i) => { const a = AIL[lvls[i]]; return { n: a.n + (n > 1 && lvls.slice(0, i).includes(lvls[i]) ? (i + 1) : ''), av: a.av, ai: lvls[i], sc: 0, buzz: 0, ok: 0, hp: 100 }; }));
       Battle.start({ mode, cat, diff, n: count, qi: 0, players, used: [] });
     };
