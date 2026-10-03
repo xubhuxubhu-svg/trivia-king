@@ -197,7 +197,7 @@ function Settings() {
   setTop('⚙️ 設定', Home);
   const sw = (k, nm) => `<label class="lb-row"><span style="flex:1">${nm}</span><input type="checkbox" data-s="${k}" ${S[k] ? 'checked' : ''} style="width:24px;height:24px"></label>`;
   const themes = [['scholar', '🏮 古風書院'], ['sakura', '🌸 唯美花見'], ['cute', '🐣 可愛萌系'], ['temple', '🎎 熱鬧廟會'], ['night', '🌙 夜色宮廷']];
-  view(`<div class="card"><div class="h3">🔊 聲音</div>${sw('sfx', '音效')}${sw('music', '背景音樂')}${sw('voice', '語音主持人')}${sw('readQ', '語音朗讀題目')}
+  view(`<div class="card"><div class="h3">🔊 聲音</div>${sw('sfx', '音效')}${sw('music', '背景音樂')}<label class="lb-row"><span style="flex:1">🎵 背景音樂曲目</span><select class="field" id="track" style="width:auto;margin:0">${[['all', '六首隨機輪播'], ...Music.TRACKS.map((n, i) => [i + 1, (i + 1) + '．' + n]), ['synth', '古箏小曲（合成）']].map(([v, n]) => `<option value="${v}" ${String(S.track) === String(v) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>${sw('voice', '語音主持人')}${sw('readQ', '語音朗讀題目')}
     <div class="lb-row"><span style="flex:1">語速</span><input type="range" min="0.6" max="1.6" step="0.1" value="${S.rate}" id="rate"></div>
     <div class="lb-row"><span style="flex:1">音量</span><input type="range" min="0.1" max="1" step="0.1" value="${S.vol}" id="vol"></div>
     <button class="btn block" id="test">🗣️ 試聽語音</button>
@@ -208,6 +208,7 @@ function Settings() {
   $$('[data-s]').forEach(c => c.onchange = () => { S[c.dataset.s] = c.checked; saveSettings(); SFX.play('click'); });
   $('#rate').oninput = e => { S.rate = +e.target.value; saveSettings(); };
   $('#vol').oninput = e => { S.vol = +e.target.value; saveSettings(); };
+  $('#track').onchange = e => { const v = e.target.value; S.track = v === 'all' || v === 'synth' ? v : +v; LS.set('tk_settings', S); Music.change(); SFX.play('click'); };
   $('#test').onclick = () => Voice.say('你好！我是博士喵，歡迎來到叫我全能智慧王！');
   $$('[data-th]').forEach(b => b.onclick = () => { S.theme = b.dataset.th; saveSettings(); startPetals(); Settings(); });
   $('#reset').onclick = async () => { const v = await ask('確定要重置嗎？', '所有等級、金幣、紀錄都會清空，<b>無法復原</b>！', [{ t: '取消', v: 0 }, { t: '確定重置', v: 1, cls: 'gold' }]); if (v) { const keep = P.created; P = newData(); P.created = keep; P.tutorial = true; save(); toast('已重置'); Home(); } };
